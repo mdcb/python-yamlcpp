@@ -1,7 +1,7 @@
 /*
- *    Copyright (C) 2012  Matthieu Bec, GMTO Corp.
+ *    Copyright (C) 2012  Matthieu Bec, mdcb808@gmail.com
  *
- *    This file is part of gmt-fwk-io.
+ *    This file is part of python-yamlcpp.
  *
  *    This program is free software: you can redistribute it and/or modify
  *    it under the terms of the GNU General Public License as published by
@@ -21,6 +21,7 @@
 #include <boost/python/list.hpp>
 #include <exception>
 #include <yaml-cpp/yaml.h>
+#include <iostream>
 
 using namespace boost::python;
 
@@ -37,6 +38,7 @@ struct yamlnode_topython_converter
 
       case YAML::NodeType::Null:
       {
+        //std::cerr << "DEBUG converting NodeType::Null\n";
         return incref(Py_None);
       }
 
@@ -44,9 +46,11 @@ struct yamlnode_topython_converter
       {
         object result;
 
+        //std::cerr << "DEBUG converting NodeType::Scalar\n";
         try
           {
             result = object(node.as<int64_t>());
+            //std::cerr << "DEBUG converting NodeType::Scalar int64_t\n";
           }
 
         catch (const YAML::BadConversion & e1)
@@ -54,6 +58,7 @@ struct yamlnode_topython_converter
             try
               {
                 result = object(node.as<double>());
+                //std::cerr << "DEBUG converting NodeType::Scalar double\n";
               }
 
             catch (const YAML::BadConversion & e2)
@@ -61,6 +66,7 @@ struct yamlnode_topython_converter
                 try
                   {
                     result = object(node.as<bool>());
+                    //std::cerr << "DEBUG converting NodeType::Scalar bool\n";
                   }
 
                 catch (const YAML::BadConversion & e3)
@@ -68,6 +74,7 @@ struct yamlnode_topython_converter
                     try
                       {
                         result = object(node.as<std::string>());
+                        //std::cerr << "DEBUG converting NodeType::Scalar string\n";
                       }
 
                     catch (const YAML::BadConversion & e3)
@@ -85,7 +92,8 @@ struct yamlnode_topython_converter
       {
         list result;
 
-        for (auto it = node.begin(); it != node.end(); ++it)
+        //std::cerr << "DEBUG converting NodeType::Sequence\n";
+        for (auto it = node.begin(); it != node.end(); ++it) // XXX auto
           {
             PyObject * obj = /*yamlnode_topython_converter::*/convert(*it);
             object pyobj = object(handle<>(obj));
@@ -99,6 +107,7 @@ struct yamlnode_topython_converter
       {
         dict result;
 
+        //std::cerr << "DEBUG converting NodeType::Map\n";
         for (auto it = node.begin(); it != node.end(); ++it)
           {
             PyObject * kobj = /*yamlnode_topython_converter::*/convert(it->first);
@@ -139,13 +148,37 @@ struct yamlnode_frompython_converter
 
   static void yp_convert(PyObject * obj_ptr, YAML::Node & node)
   {
-    if (PyString_Check(obj_ptr)) // NB: strings are sequence
+    if (PyBytes_Check(obj_ptr)) // NB: strings are not bytes
       {
-        node = std::string(PyString_AsString(obj_ptr));
+        //std::cerr << "DEBUG converting bytes\n";
+        node = std::string(PyBytes_AsString(obj_ptr));
+      }
+
+    else if (PyUnicode_Check(obj_ptr))
+      {
+        //std::cerr << "DEBUG converting unicode\n";
+        node = std::string(PyBytes_AsString(PyUnicode_AsASCIIString(obj_ptr)));
+      }
+
+    else if (PySequence_Check(obj_ptr)) // test before mapping because list have mapping in python3
+      {
+        //std::cerr << "DEBUG converting sequence\n";
+        node = YAML::Node(YAML::NodeType::Sequence);
+
+        for (Py_ssize_t i = 0; i < PySequence_Length(obj_ptr); i++)
+          {
+            PyObject * elt = PySequence_GetItem(obj_ptr, i);
+            YAML::Node elty;
+            yp_convert(elt, elty);
+            node.push_back(elty);
+          }
       }
 
     else if (PyMapping_Check(obj_ptr))
       {
+        //std::cerr << "DEBUG converting map\n";
+        node = YAML::Node(YAML::NodeType::Map);
+
         PyObject * keyvals = PyMapping_Items(obj_ptr);
 
         for (Py_ssize_t i = 0; i < PyMapping_Length(keyvals); i++)
@@ -159,41 +192,32 @@ struct yamlnode_frompython_converter
             yp_convert(v, eltv);
             node[*peltk] = eltv;
           }
-      }
 
-    else if (PySequence_Check(obj_ptr))
-      {
-        for (Py_ssize_t i = 0; i < PySequence_Length(obj_ptr); i++)
-          {
-            PyObject * elt = PySequence_GetItem(obj_ptr, i);
-            YAML::Node elty;
-            yp_convert(elt, elty);
-            node.push_back(elty);
-          }
+
+
       }
 
     else if (PyBool_Check(obj_ptr))
       {
-        node = static_cast<bool>(PyInt_AsLong(obj_ptr));
-      }
-
-    else if (PyInt_Check(obj_ptr))
-      {
-        node = PyInt_AsLong(obj_ptr);
+        //std::cerr << "DEBUG converting bool\n";
+        node = static_cast<bool>(PyLong_AsLong(obj_ptr));
       }
 
     else if (PyLong_Check(obj_ptr))
       {
+        //std::cerr << "DEBUG converting long\n";
         node = PyLong_AsLong(obj_ptr);
       }
 
     else if (PyFloat_Check(obj_ptr))
       {
+        //std::cerr << "DEBUG converting float\n";
         node = PyFloat_AsDouble(obj_ptr);
       }
 
     else
       {
+        //std::cerr << "DEBUG conversion not supported\n";
         throw std::runtime_error("invalid type for conversion.");
       }
   }
@@ -208,9 +232,7 @@ struct yamlnode_frompython_converter
     yp_convert(obj_ptr, node);
 
     // Grab pointer to memory into which to construct the new YAML::Node
-    void * storage = (
-                       (converter::rvalue_from_python_storage<YAML::Node> *)
-                       data)->storage.bytes;
+    void * storage = ((converter::rvalue_from_python_storage<YAML::Node> *) data)->storage.bytes;
 
     // in-place construct the new YAML::Node using the character data
     // extracted from the python object
@@ -221,15 +243,15 @@ struct yamlnode_frompython_converter
   }
 };
 
-
 //-----------------------------------------------------
 // module definition
 //-----------------------------------------------------
 
 
-BOOST_PYTHON_MODULE(boostyamlcpp)
+BOOST_PYTHON_MODULE(yamlcpp)
 {
   to_python_converter<YAML::Node, yamlnode_topython_converter>();
   yamlnode_frompython_converter();
 }
+
 

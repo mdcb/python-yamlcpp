@@ -1,4 +1,5 @@
-python-boostyamlcpp
-===================
+python-yamlcpp
+==============
 
-yamlcpp converter for python-boost
+yamlcpp converter for python.
+

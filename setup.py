@@ -1,8 +1,8 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 #
-#  Copyright (C) 2012  Matthieu Bec, GMTO Corp.
+#  Copyright (C) 2015  Matthieu Bec, mdcb808@gmail.com
 #
-#  This file is part of gmt-fwk-io.
+#  This file is part of python-yamlcpp.
 #
 #  This program is free software: you can redistribute it and/or modify
 #  it under the terms of the GNU General Public License as published by
@@ -26,34 +26,34 @@ version = '0.1'
 
 extra_compile_args=[
   '-Wall',
+  '-Wextra',
+  '-pedantic',
   '-std=c++11',
-  '-Wno-packed-bitfield-compat',
-  '-pthread',
 ]
 
-setup(name='python-boostyamlcpp',
+setup(name='python-yamlcpp',
       version=version,
-      description='yamlcpp converter for python-boost',
-      long_description='yamlcpp converter for python-boost.',
+      description='yamlcpp converter for python',
+      long_description='yamlcpp converter for python.',
       author='Matthieu Bec',
       author_email='mdcb808@gmail.com',
-      url='https://github.com/mdcb/python-boost-yamlcpp',
+      url='https://github.com/mdcb/python-yamlcpp',
       license='GPL',
       ext_modules=[
          Extension(
-            name='boostyamlcpp',
+            name='yamlcpp',
             sources = [
-              'boostyamlcpp.cpp',
+              'extension.cpp',
             ],
             include_dirs=[
               '/usr/include/boost',
-              '/usr/include/yamlcpp',
+              '/usr/include/yamlcpp', # pkg-config --cflags yamlcpp
             ],
             undef_macros=[],
             define_macros=[],
             libraries = [
-              'boost_python',
-              'yaml-cpp',
+              'boost_python3',
+              'yaml-cpp', # pkg-config --libs yamlcpp
             ],
             extra_compile_args = extra_compile_args,
             ),
